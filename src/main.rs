@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if result.unwrap() == 0 {
                             break;
                         }
-                            tx.send((format!("{}: {}", addr.to_string(), line.clone()), addr)).unwrap();
+                            tx.send((format!("{}: {}", addr, line.clone()), addr)).unwrap();
                             line.clear();
                     }
                     result = rx.recv() => {
