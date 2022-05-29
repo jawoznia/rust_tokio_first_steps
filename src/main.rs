@@ -6,10 +6,10 @@ use tokio::sync::broadcast;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind("127.0.0.1:8080").await?;
 
-    let (tx, _) = broadcast::channel::<String>(10);
+    let (tx, _) = broadcast::channel(10);
 
     loop {
-        let (mut socket, _) = listener.accept().await?;
+        let (mut socket, addr) = listener.accept().await?;
 
         let tx = tx.clone();
         let mut rx = tx.subscribe();
@@ -27,14 +27,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if result.unwrap() == 0 {
                             break;
                         }
-                            tx.send(line.clone()).unwrap();
+                            tx.send((line.clone(), addr)).unwrap();
                             line.clear();
                     }
                     result = rx.recv() => {
-                        let msg = result.unwrap();
-                        if let Err(e) = writer.write_all(msg.as_bytes()).await {
-                            eprintln!("failed to write to socket; err = {:?}", e);
-                            return;
+                        let (msg, sender_addr) = result.unwrap();
+                        if addr != sender_addr {
+                            if let Err(e) = writer.write_all(msg.as_bytes()).await {
+                                eprintln!("failed to write to socket; err = {:?}", e);
+                                return;
+                            }
                         }
                 }
                 }
