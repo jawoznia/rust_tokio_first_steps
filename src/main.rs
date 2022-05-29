@@ -1,4 +1,4 @@
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 
@@ -13,28 +13,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let tx = tx.clone();
         let mut rx = tx.subscribe();
+
         tokio::spawn(async move {
-            let mut buf = [0; 1024];
+            let (reader, mut writer) = socket.split();
+
+            let mut reader = BufReader::new(reader);
+            let mut line = String::new();
 
             // In a loop, read data from the socket and write the data back.
             loop {
                 tokio::select! {
-                    result = socket.read(&mut buf) => {
+                    result = reader.read_line(&mut line) => {
                         if result.unwrap() == 0 {
                             break;
                         }
-                        if let Ok(line) = std::str::from_utf8(&buf) {
-                            tx.send(line.to_string()).unwrap();
-                        }
+                            tx.send(line.clone()).unwrap();
+                            line.clear();
                     }
                     result = rx.recv() => {
                         let msg = result.unwrap();
-                        if let Err(e) = socket.write_all(msg.as_bytes()).await {
+                        if let Err(e) = writer.write_all(msg.as_bytes()).await {
                             eprintln!("failed to write to socket; err = {:?}", e);
                             return;
                         }
-                        buf.iter_mut().for_each(|x| *x = 0)
-                    }
+                }
                 }
             }
         });
