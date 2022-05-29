@@ -18,26 +18,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // In a loop, read data from the socket and write the data back.
             loop {
-                let _n = match socket.read(&mut buf).await {
-                    // socket closed
-                    Ok(n) if n == 0 => return,
-                    Ok(n) => n,
-                    Err(e) => {
-                        eprintln!("failed to read from socket; err = {:?}", e);
-                        return;
+                tokio::select! {
+                    result = socket.read(&mut buf) => {
+                        if result.unwrap() == 0 {
+                            break;
+                        }
+                        if let Ok(line) = std::str::from_utf8(&buf) {
+                            tx.send(line.to_string()).unwrap();
+                        }
                     }
-                };
-
-                if let Ok(line) = std::str::from_utf8(&buf) {
-                    tx.send(line.to_string()).unwrap();
-                }
-
-                let msg = rx.recv().await.unwrap();
-
-                // Write the data back
-                if let Err(e) = socket.write_all(msg.as_bytes()).await {
-                    eprintln!("failed to write to socket; err = {:?}", e);
-                    return;
+                    result = rx.recv() => {
+                        let msg = result.unwrap();
+                        if let Err(e) = socket.write_all(msg.as_bytes()).await {
+                            eprintln!("failed to write to socket; err = {:?}", e);
+                            return;
+                        }
+                        buf.iter_mut().for_each(|x| *x = 0)
+                    }
                 }
             }
         });
